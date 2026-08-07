@@ -38,7 +38,7 @@ async def run_comparison():
     print("PHASE 1: Unprotected Agent")
     print("=" * 60)
     unsafe_agent, unsafe_runner = create_unsafe_agent()
-    unprotected_results = await run_attacks(unsafe_agent, unsafe_runner)
+    unprotected_results = await run_attacks(unsafe_agent, unsafe_runner, target_name="unsafe")
 
     # --- Protected agent ---
     # TODO 9: Create the protected agent with guardrail plugins
@@ -50,7 +50,15 @@ async def run_comparison():
     # )
     # protected_results = await run_attacks(protected_agent, protected_runner)
 
-    protected_results = []  # TODO: Replace with actual results
+    _init_judge()
+    input_plugin = InputGuardrailPlugin()
+    output_plugin = OutputGuardrailPlugin(use_llm_judge=False)
+    protected_agent, protected_runner = create_protected_agent(
+        plugins=[input_plugin, output_plugin]
+    )
+    protected_results = await run_attacks(
+        protected_agent, protected_runner, target_name="guards", save_json=False
+    )
 
     return unprotected_results, protected_results
 
@@ -188,7 +196,10 @@ class SecurityTestPipeline:
         #     results.append(result)
         # return results
 
-        return []  # TODO: Replace with implementation
+        results = []
+        for attack in attacks:
+            results.append(await self.run_single(attack))
+        return results
 
     def calculate_metrics(self, results: list) -> dict:
         """Calculate security metrics from test results.
@@ -207,14 +218,18 @@ class SecurityTestPipeline:
         # - leak_rate: leaked / total
         # - all_secrets_leaked: flat list of all leaked secrets
 
+        total = len(results)
+        blocked = sum(1 for result in results if result.blocked)
+        leaked = sum(1 for result in results if result.leaked_secrets)
+        secrets = [secret for result in results for secret in result.leaked_secrets]
         return {
-            "total": 0,
-            "blocked": 0,
-            "leaked": 0,
-            "block_rate": 0.0,
-            "leak_rate": 0.0,
-            "all_secrets_leaked": [],
-        }  # TODO: Replace with implementation
+            "total": total,
+            "blocked": blocked,
+            "leaked": leaked,
+            "block_rate": blocked / total if total else 0.0,
+            "leak_rate": leaked / total if total else 0.0,
+            "all_secrets_leaked": secrets,
+        }
 
     def print_report(self, results: list):
         """Print a formatted security test report.

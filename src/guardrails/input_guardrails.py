@@ -5,12 +5,21 @@ Lab 11 — Part 2A: Input Guardrails
   TODO 3: Input Guardrail Plugin (ADK)
 """
 import re
+import unicodedata
 
 from google.genai import types
 from google.adk.plugins import base_plugin
 from google.adk.agents.invocation_context import InvocationContext
 
 from core.config import ALLOWED_TOPICS, BLOCKED_TOPICS
+
+_INVISIBLE = "\u200b\u200c\u200d\ufeff\u2060"
+
+def normalize_input(text: str) -> str:
+    """Canonicalize Unicode and remove invisible separators before matching."""
+    normalized = unicodedata.normalize("NFKC", text or "")
+    normalized = normalized.translate(str.maketrans("", "", _INVISIBLE))
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 # ============================================================
@@ -41,14 +50,24 @@ def detect_injection(user_input: str) -> bool:
     Returns:
         True if injection detected, False otherwise
     """
+    normalized = normalize_input(user_input)
     INJECTION_PATTERNS = [
-        # TODO: Add at least 5 regex patterns
-        # Example:
-        # r"ignore (all )?(previous|above) instructions",
+        r"ignore\s+(?:all\s+)?(?:previous|above|prior)\s+instructions?",
+        r"disregard\s+(?:all\s+)?(?:previous|above|prior)?\s*(?:instructions?|rules?|directives?)",
+        r"you\s+are\s+now\b",
+        r"(?:system|developer)\s+(?:prompt|instructions?)",
+        r"reveal\s+(?:your\s+)?(?:instructions?|prompt|password|secrets?|api\s*key)",
+        r"pretend\s+(?:you\s+are|to\s+be)",
+        r"act\s+as\s+(?:a\s+|an\s+)?(?:unrestricted|jailbroken|evil)",
+        r"(?:output|translate|encode|summari[sz]e)\b.{0,80}(?:prompt|instructions?|password|api\s*key|secret)",
+        r"(?:fill\s+in|complete)\b.{0,80}(?:password|api\s*key|database|credential)",
+        r"\b(?:DAN|jailbreak)\b",
+        r"bỏ\s+qua\s+(?:mọi\s+)?hướng\s+dẫn",
+        r"(?:tiết\s+lộ|cho\s+tôi\s+xem)\b.{0,80}(?:mật\s+khẩu|api|hướng\s+dẫn|thông\s+tin\s+nội\s+bộ)",
     ]
 
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, user_input, re.IGNORECASE):
+        if re.search(pattern, normalized, re.IGNORECASE):
             return True
     return False
 
@@ -72,14 +91,18 @@ def topic_filter(user_input: str) -> bool:
     Returns:
         True if input should be BLOCKED (off-topic or blocked topic)
     """
-    input_lower = user_input.lower()
+    input_lower = normalize_input(user_input).casefold()
 
     # TODO: Implement logic:
     # 1. If input contains any blocked topic -> return True
     # 2. If input doesn't contain any allowed topic -> return True
     # 3. Otherwise -> return False (allow)
 
-    pass  # Replace with your implementation
+    if not input_lower:
+        return True
+    if any(t.casefold() in input_lower for t in BLOCKED_TOPICS):
+        return True
+    return not any(t.casefold() in input_lower for t in ALLOWED_TOPICS)
 
 
 # ============================================================
@@ -139,7 +162,13 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         #    - If True: increment blocked_count, return self._block_response("...")
         # 3. If both are False: return None (let message through)
 
-        pass  # Replace with your implementation
+        if detect_injection(text):
+            self.blocked_count += 1
+            return self._block_response("I cannot process instructions that override VinBank security rules.")
+        if topic_filter(text):
+            self.blocked_count += 1
+            return self._block_response("I'm a VinBank assistant and can only help with banking-related questions.")
+        return None
 
 
 # ============================================================

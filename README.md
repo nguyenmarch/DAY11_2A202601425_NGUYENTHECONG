@@ -189,3 +189,20 @@ Nộp theo [`SUBMISSION.md`](SUBMISSION.md).
 - [NeMo Guardrails](https://github.com/NVIDIA/NeMo-Guardrails)
 - [Google ADK](https://google.github.io/adk-docs/)
 - [AI Safety Fundamentals](https://aisafetyfundamentals.com/)
+
+
+## Completed implementation
+
+The repository now includes the complete Google ADK/Gemini defense pipeline: Unicode-aware direct and indirect input guardrails, PII/secret output filtering, Gemini safety judge, NeMo rules, per-user rate limiting, deterministic egress policy, HITL routing, correlated audit logs, monitoring alerts, automated security tests, and live red-team evidence.
+
+The configuration accepts either GOOGLE_API_KEY or GEMINI_API_KEY from .env. Set STUDENT_ID before regenerating final artifacts with src/main.py --part 5, then run scripts/grade.py.
+
+Replace SE00000 in the generated report filename and header with the real student ID before submission.
+
+## Streamlit classroom demo
+
+Run the pastel presentation UI from the repository root:
+
+    streamlit run app.py
+
+The sidebar identifies Nguyen The Cong (MSSV 2A202601425). Use Chat demo for a live guardrail walkthrough, Security cockpit for attack evidence and egress policy, and HITL review for the human-approval flow.

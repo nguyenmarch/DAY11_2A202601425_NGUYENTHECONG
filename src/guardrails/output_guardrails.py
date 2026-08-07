@@ -41,12 +41,12 @@ def content_filter(response: str) -> dict:
 
     # PII patterns to check
     PII_PATTERNS = {
-        # TODO: Add regex patterns for:
-        # - VN phone number: r"0\d{9,10}"
-        # - Email: r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}"
-        # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
-        # - API key pattern: r"sk-[a-zA-Z0-9-]+"
-        # - Password pattern: r"password\s*[:=]\s*\S+"
+        "vn_phone": r"(?<!\d)(?:\+?84|0)(?:[ .-]?\d){9,10}(?!\d)",
+        "email": r"\b[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}\b",
+        "national_id": r"(?<!\d)(?:\d{9}|\d{12})(?!\d)",
+        "api_key": r"\bsk-[a-zA-Z0-9-]{8,}\b",
+        "password": r"(?:password|mật\s*khẩu)\s*(?:is|[:=])\s*['\"]?[^\s,'\"]+",
+        "internal_host": r"\b(?:[a-z0-9-]+\.)+internal(?::\d+)?\b",
     }
 
     for name, pattern in PII_PATTERNS.items():
@@ -97,7 +97,10 @@ If UNSAFE, add a brief reason on the next line.
 #     instruction=SAFETY_JUDGE_INSTRUCTION,
 # )
 
-safety_judge_agent = None  # TODO: Replace with implementation
+safety_judge_agent = llm_agent.LlmAgent(
+    model="gemini-3.1-flash-lite", name="safety_judge",
+    instruction=SAFETY_JUDGE_INSTRUCTION,
+)
 judge_runner = None
 
 
@@ -181,7 +184,20 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         #    - Increment self.blocked_count
         # 3. Return llm_response (possibly modified)
 
-        return llm_response  # TODO: modify if needed
+        filtered = content_filter(response_text)
+        candidate = response_text
+        if not filtered["safe"]:
+            candidate = filtered["redacted"]
+            self.redacted_count += 1
+            llm_response.content = types.Content(role="model", parts=[types.Part.from_text(text=candidate)])
+        if self.use_llm_judge:
+            judged = await llm_safety_check(candidate)
+            if not judged["safe"]:
+                self.blocked_count += 1
+                llm_response.content = types.Content(role="model", parts=[types.Part.from_text(
+                    text="I cannot provide that response safely. Please ask a VinBank banking question."
+                )])
+        return llm_response
 
 
 # ============================================================

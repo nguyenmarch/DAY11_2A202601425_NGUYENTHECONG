@@ -3,11 +3,16 @@ Lab 11 — Configuration & API Key Setup
 """
 import os
 
+from dotenv import load_dotenv
+
 
 def setup_api_key():
-    """Load Google API key from environment or prompt."""
-    if "GOOGLE_API_KEY" not in os.environ:
-        os.environ["GOOGLE_API_KEY"] = input("Enter Google API Key: ")
+    """Load Gemini credentials from .env without logging them."""
+    load_dotenv()
+    key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    if not key:
+        key = input("Enter Google/Gemini API Key: ").strip()
+    os.environ["GOOGLE_API_KEY"] = key
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "0"
     print("API key loaded.")
 

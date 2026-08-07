@@ -84,13 +84,17 @@ class ConfidenceRouter:
         #      action="escalate", priority="high",
         #      requires_human=True, reason="Low confidence — escalating"
 
-        return RoutingDecision(
-            action="auto_send",
-            confidence=confidence,
-            reason="TODO: implement routing logic",
-            priority="low",
-            requires_human=False,
-        )  # TODO: Replace with implementation
+        confidence = max(0.0, min(1.0, float(confidence)))
+        if action_type in HIGH_RISK_ACTIONS:
+            return RoutingDecision("escalate", confidence,
+                                   f"High-risk action: {action_type}", "high", True)
+        if confidence >= self.HIGH_THRESHOLD:
+            return RoutingDecision("auto_send", confidence, "High confidence", "low", False)
+        if confidence >= self.MEDIUM_THRESHOLD:
+            return RoutingDecision("queue_review", confidence,
+                                   "Medium confidence — needs review", "normal", True)
+        return RoutingDecision("escalate", confidence,
+                               "Low confidence — escalating", "high", True)
 
 
 # ============================================================
@@ -110,34 +114,31 @@ class ConfidenceRouter:
 
 hitl_decision_points = [
     {
-        "id": 1,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "id": 1, "name": "Money movement approval",
+        "trigger": "Any transfer_money intent, regardless of model confidence or claimed authority.",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": "Request ID, authenticated customer, source/destination, amount, fees, risk signals, and proposed transaction diff.",
+        "example": "Transfer 50,000,000 VND to a newly added beneficiary.",
+        "approval_path": "Approve records reviewer and HITL approval ID; reject cancels; timeout fails closed without sending.",
+        "audit_fields": "request_id, intent, before_state, proposed_diff, destination, reviewer_id, decision, reason, decided_at",
     },
     {
-        "id": 2,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "id": 2, "name": "Account and identity changes",
+        "trigger": "close_account, change_password, delete_data, or update_personal_info.",
+        "hitl_model": "human-in-the-loop",
+        "context_needed": "Request ID, verified identity evidence, current values, redacted proposed diff, affected systems, and rollback plan.",
+        "example": "Change a customer's registered phone after an email request.",
+        "approval_path": "Approve executes only the reviewed diff; reject leaves state unchanged; timeout queues a secure support case.",
+        "audit_fields": "request_id, intent, identity_check, before_state_hash, proposed_diff, reviewer_id, decision, reason, decided_at",
     },
     {
-        "id": 3,
-        "name": "TODO: Name this decision point",
-        "trigger": "TODO: When does this trigger?",
-        "hitl_model": "TODO: human-in-the-loop / human-on-the-loop / human-as-tiebreaker",
-        "context_needed": "TODO: What does the reviewer need to see?",
-        "example": "TODO: Give a concrete example scenario",
-        "approval_path": "TODO: Explain approve, reject and timeout behavior",
-        "audit_fields": "TODO: List correlation ID, intent, diff and reviewer decision",
+        "id": 3, "name": "Low-confidence or conflicting advice",
+        "trigger": "Confidence below 0.9, judge disagreement, or conflicting retrieved banking policy.",
+        "hitl_model": "human-as-tiebreaker",
+        "context_needed": "Request ID, user question, candidate answer, confidence, judge result, cited trusted sources, and differences.",
+        "example": "Two policy documents disagree about early loan repayment fees.",
+        "approval_path": "Approve releases edited answer; reject replaces it with escalation; timeout returns a safe no-answer response.",
+        "audit_fields": "request_id, intent, response_diff, confidence, judge_verdict, sources, reviewer_id, decision, decided_at",
     },
 ]
 
